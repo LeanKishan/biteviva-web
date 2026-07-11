@@ -1,0 +1,562 @@
+<title>Speed Tracker</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<meta name="theme-color" content="#0a0d12" />
+<style>
+  :root {
+    --bg: #0a0d12;
+    --surface: #12161f;
+    --surface-2: #191f2c;
+    --hairline: #232a38;
+    --text: #eef1f6;
+    --text-dim: #7c8598;
+    --accent: #ff8a34;
+    --accent-dim: #a35a25;
+    --accent-soft: rgba(255, 138, 52, 0.14);
+    --teal: #35d0c0;
+    --danger: #ff5c5c;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    overscroll-behavior: none;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    user-select: none;
+  }
+
+  /* ---------- status strip ---------- */
+  .status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.9rem 1.1rem 0.4rem;
+  }
+
+  .live {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    transition: background 0.3s ease;
+  }
+
+  .live.on .live-dot {
+    background: var(--teal);
+    box-shadow: 0 0 0 0 rgba(53, 208, 192, 0.6);
+    animation: pulse 1.8s ease-out infinite;
+  }
+
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(53, 208, 192, 0.55); }
+    70%  { box-shadow: 0 0 0 8px rgba(53, 208, 192, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(53, 208, 192, 0); }
+  }
+
+  .gps-chip {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    padding: 0.3rem 0.6rem;
+    border-radius: 999px;
+  }
+
+  .gps-chip.weak { color: var(--danger); border-color: rgba(255, 92, 92, 0.35); }
+
+  /* ---------- gauge ---------- */
+  .gauge-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1rem;
+    min-height: 0;
+  }
+
+  .gauge {
+    position: relative;
+    width: min(78vw, 340px);
+    aspect-ratio: 1;
+  }
+
+  .gauge svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+
+  .gauge-track { fill: none; stroke: var(--surface-2); stroke-width: 10; }
+
+  .gauge-fill {
+    fill: none;
+    stroke: url(#gaugeGradient);
+    stroke-width: 10;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.25s ease-out;
+  }
+
+  .gauge-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 0.15rem;
+  }
+
+  .speed-value {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-weight: 800;
+    font-size: clamp(3.6rem, 18vw, 5.4rem);
+    line-height: 1;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  .speed-unit {
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .insight {
+    margin-top: 0.6rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.02em;
+    min-height: 1.2em;
+  }
+
+  /* ---------- stats ---------- */
+  .stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--hairline);
+    border-top: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .stat {
+    background: var(--bg);
+    padding: 0.85rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .stat-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .stat-value {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 1.3rem;
+    font-weight: 700;
+  }
+
+  .stat:first-child .stat-value { color: var(--accent); }
+  .stat:last-child .stat-value { color: var(--teal); }
+
+  /* ---------- controls ---------- */
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.9rem 1.1rem calc(0.9rem + env(safe-area-inset-bottom));
+  }
+
+  button { font: inherit; color: inherit; }
+
+  .btn-main {
+    flex: 1;
+    border: none;
+    border-radius: 14px;
+    padding: 0.95rem 1rem;
+    font-weight: 800;
+    font-size: 1rem;
+    letter-spacing: 0.02em;
+    background: var(--accent);
+    color: #1a0f04;
+  }
+
+  .btn-main.active {
+    background: var(--surface);
+    color: var(--danger);
+    border: 1px solid rgba(255, 92, 92, 0.4);
+  }
+
+  .btn-ghost {
+    border: 1px solid var(--hairline);
+    background: var(--surface);
+    color: var(--text-dim);
+    border-radius: 14px;
+    padding: 0.95rem 1rem;
+    font-weight: 700;
+    font-size: 0.85rem;
+  }
+
+  .unit-toggle {
+    display: flex;
+    border: 1px solid var(--hairline);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+
+  .unit-toggle button {
+    border: none;
+    background: var(--surface);
+    color: var(--text-dim);
+    padding: 0.95rem 0.85rem;
+    font-weight: 700;
+    font-size: 0.8rem;
+  }
+
+  .unit-toggle button.selected {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  /* ---------- intro / error overlay ---------- */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 2rem;
+    gap: 0.9rem;
+    z-index: 10;
+  }
+
+  .overlay.hidden { display: none; }
+
+  .overlay h1 {
+    font-size: 1.4rem;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+
+  .overlay p {
+    margin: 0;
+    max-width: 30ch;
+    color: var(--text-dim);
+    font-size: 0.92rem;
+    line-height: 1.5;
+  }
+
+  .overlay p.err { color: var(--danger); }
+
+  .overlay button {
+    margin-top: 0.6rem;
+    border: none;
+    border-radius: 14px;
+    padding: 0.9rem 1.8rem;
+    font-weight: 800;
+    font-size: 1rem;
+    background: var(--accent);
+    color: #1a0f04;
+  }
+</style>
+
+<div class="status">
+  <span class="live" id="liveTag"><span class="live-dot"></span><span id="liveText">Idle</span></span>
+  <span class="gps-chip" id="gpsChip">No GPS fix</span>
+</div>
+
+<div class="gauge-wrap">
+  <div class="gauge">
+    <svg viewBox="0 0 200 200">
+      <defs>
+        <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#35d0c0" />
+          <stop offset="55%" stop-color="#ff8a34" />
+          <stop offset="100%" stop-color="#ff5c5c" />
+        </linearGradient>
+      </defs>
+      <circle class="gauge-track" cx="100" cy="100" r="90" />
+      <circle class="gauge-fill" id="gaugeFill" cx="100" cy="100" r="90" />
+    </svg>
+    <div class="gauge-center">
+      <div class="speed-value" id="speedValue">0</div>
+      <div class="speed-unit" id="speedUnit">km/h</div>
+      <div class="insight" id="insight">Tap Start to begin</div>
+    </div>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat">
+    <span class="stat-label">Max</span>
+    <span class="stat-value" id="maxValue">0 km/h</span>
+  </div>
+  <div class="stat">
+    <span class="stat-label">Avg</span>
+    <span class="stat-value" id="avgValue">0 km/h</span>
+  </div>
+</div>
+
+<div class="controls">
+  <button class="btn-main" id="toggleBtn">Start</button>
+  <button class="btn-ghost" id="resetBtn">Reset</button>
+  <div class="unit-toggle">
+    <button id="unitKmh" class="selected">km/h</button>
+    <button id="unitMph">mph</button>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <h1>Speed Tracker</h1>
+  <p id="overlayMsg">Uses your phone's GPS to show live speed. Nothing is recorded or sent anywhere — it all stays on this screen.</p>
+  <button id="overlayBtn">Start Tracking</button>
+</div>
+
+<script>
+  (function () {
+    "use strict";
+
+    var MAX_SCALE_KMH = 180; // full sweep of the gauge
+    var CIRCUMFERENCE = 2 * Math.PI * 90;
+    var SMOOTHING = 0.35; // EMA factor: higher = more responsive, lower = smoother
+
+    var els = {
+      liveTag: document.getElementById("liveTag"),
+      liveText: document.getElementById("liveText"),
+      gpsChip: document.getElementById("gpsChip"),
+      speedValue: document.getElementById("speedValue"),
+      speedUnit: document.getElementById("speedUnit"),
+      insight: document.getElementById("insight"),
+      maxValue: document.getElementById("maxValue"),
+      avgValue: document.getElementById("avgValue"),
+      gaugeFill: document.getElementById("gaugeFill"),
+      toggleBtn: document.getElementById("toggleBtn"),
+      resetBtn: document.getElementById("resetBtn"),
+      unitKmh: document.getElementById("unitKmh"),
+      unitMph: document.getElementById("unitMph"),
+      overlay: document.getElementById("overlay"),
+      overlayMsg: document.getElementById("overlayMsg"),
+      overlayBtn: document.getElementById("overlayBtn"),
+    };
+
+    els.gaugeFill.style.strokeDasharray = CIRCUMFERENCE;
+    els.gaugeFill.style.strokeDashoffset = CIRCUMFERENCE;
+
+    var state = {
+      tracking: false,
+      watchId: null,
+      unit: localStorage.getItem("speedUnit") || "kmh",
+      smoothedKmh: 0,
+      maxKmh: 0,
+      totalDistanceM: 0,
+      startTime: null,
+      lastFix: null, // { lat, lon, t }
+    };
+
+    setUnit(state.unit, true);
+
+    function toRad(deg) { return (deg * Math.PI) / 180; }
+
+    function haversineMeters(lat1, lon1, lat2, lon2) {
+      var R = 6371000;
+      var dLat = toRad(lat2 - lat1);
+      var dLon = toRad(lon2 - lon1);
+      var a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function classify(kmh) {
+      if (!state.tracking) return "Tap Start to begin";
+      if (kmh < 1) return "Stopped";
+      if (kmh < 6) return "Walking pace";
+      if (kmh < 25) return "Slow traffic";
+      if (kmh < 60) return "City driving";
+      if (kmh < 100) return "Open road";
+      return "Highway speed";
+    }
+
+    function fmt(kmh) {
+      if (state.unit === "mph") return { value: kmh * 0.621371, unit: "mph" };
+      return { value: kmh, unit: "km/h" };
+    }
+
+    function render() {
+      var display = fmt(state.smoothedKmh);
+      els.speedValue.textContent = Math.round(display.value);
+      els.speedUnit.textContent = display.unit;
+      els.insight.textContent = classify(state.smoothedKmh);
+
+      var max = fmt(state.maxKmh);
+      els.maxValue.textContent = Math.round(max.value) + " " + max.unit;
+
+      var elapsedH = state.startTime ? (Date.now() - state.startTime) / 3600000 : 0;
+      var avgKmh = elapsedH > 0 ? state.totalDistanceM / 1000 / elapsedH : 0;
+      var avg = fmt(avgKmh);
+      els.avgValue.textContent = Math.round(avg.value) + " " + avg.unit;
+
+      var pct = Math.max(0, Math.min(1, state.smoothedKmh / MAX_SCALE_KMH));
+      els.gaugeFill.style.strokeDashoffset = CIRCUMFERENCE * (1 - pct);
+    }
+
+    function onPosition(pos) {
+      var c = pos.coords;
+      var now = pos.timestamp || Date.now();
+
+      var accuracy = typeof c.accuracy === "number" ? c.accuracy : null;
+      if (accuracy !== null) {
+        els.gpsChip.textContent = "±" + Math.round(accuracy) + "m";
+        els.gpsChip.classList.toggle("weak", accuracy > 30);
+      }
+
+      var instantKmh = null;
+      if (typeof c.speed === "number" && !isNaN(c.speed) && c.speed >= 0) {
+        instantKmh = c.speed * 3.6;
+      } else if (state.lastFix) {
+        var dt = (now - state.lastFix.t) / 1000;
+        if (dt > 0.4) {
+          var distM = haversineMeters(state.lastFix.lat, state.lastFix.lon, c.latitude, c.longitude);
+          instantKmh = (distM / dt) * 3.6;
+        }
+      }
+
+      if (state.lastFix) {
+        var segM = haversineMeters(state.lastFix.lat, state.lastFix.lon, c.latitude, c.longitude);
+        if (segM > 0.5) state.totalDistanceM += segM;
+      }
+      state.lastFix = { lat: c.latitude, lon: c.longitude, t: now };
+
+      if (instantKmh !== null) {
+        instantKmh = Math.max(0, Math.min(instantKmh, 400));
+        state.smoothedKmh = state.smoothedKmh + SMOOTHING * (instantKmh - state.smoothedKmh);
+        if (state.smoothedKmh > state.maxKmh) state.maxKmh = state.smoothedKmh;
+      }
+
+      render();
+    }
+
+    function onError(err) {
+      var msg = "Couldn't read GPS. Try again outdoors with a clear sky view.";
+      if (err.code === err.PERMISSION_DENIED) {
+        msg = "Location access was denied. Enable it for this site in your browser settings, then reload.";
+      } else if (err.code === err.TIMEOUT) {
+        msg = "GPS signal timed out. Retrying…";
+        els.gpsChip.textContent = "Weak signal";
+        els.gpsChip.classList.add("weak");
+        return;
+      }
+      stopTracking();
+      showOverlay(msg, true);
+    }
+
+    function startTracking() {
+      if (!window.isSecureContext) {
+        showOverlay("This page needs to be opened over HTTPS (or localhost) for GPS access to work.", true);
+        return;
+      }
+      if (!("geolocation" in navigator)) {
+        showOverlay("This browser doesn't support GPS location.", true);
+        return;
+      }
+
+      state.tracking = true;
+      state.startTime = Date.now();
+      state.lastFix = null;
+      els.liveTag.classList.add("on");
+      els.liveText.textContent = "Tracking";
+      els.toggleBtn.textContent = "Stop";
+      els.toggleBtn.classList.add("active");
+      els.overlay.classList.add("hidden");
+
+      state.watchId = navigator.geolocation.watchPosition(onPosition, onError, {
+        enableHighAccuracy: true,
+        maximumAge: 500,
+        timeout: 10000,
+      });
+    }
+
+    function stopTracking() {
+      state.tracking = false;
+      if (state.watchId !== null) {
+        navigator.geolocation.clearWatch(state.watchId);
+        state.watchId = null;
+      }
+      els.liveTag.classList.remove("on");
+      els.liveText.textContent = "Idle";
+      els.toggleBtn.textContent = "Start";
+      els.toggleBtn.classList.remove("active");
+      state.smoothedKmh = 0;
+      render();
+    }
+
+    function resetStats() {
+      state.maxKmh = 0;
+      state.totalDistanceM = 0;
+      state.startTime = state.tracking ? Date.now() : null;
+      render();
+    }
+
+    function setUnit(unit, silent) {
+      state.unit = unit;
+      localStorage.setItem("speedUnit", unit);
+      els.unitKmh.classList.toggle("selected", unit === "kmh");
+      els.unitMph.classList.toggle("selected", unit === "mph");
+      if (!silent) render();
+    }
+
+    function showOverlay(msg, isError) {
+      els.overlayMsg.textContent = msg;
+      els.overlayMsg.classList.toggle("err", !!isError);
+      els.overlayBtn.textContent = isError ? "Try Again" : "Start Tracking";
+      els.overlay.classList.remove("hidden");
+    }
+
+    els.toggleBtn.addEventListener("click", function () {
+      if (state.tracking) stopTracking();
+      else startTracking();
+    });
+
+    els.resetBtn.addEventListener("click", resetStats);
+    els.unitKmh.addEventListener("click", function () { setUnit("kmh"); });
+    els.unitMph.addEventListener("click", function () { setUnit("mph"); });
+    els.overlayBtn.addEventListener("click", startTracking);
+
+    render();
+  })();
+</script>
